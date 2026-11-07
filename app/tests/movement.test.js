@@ -67,7 +67,7 @@ test('shoulder responds at full speed and reverses immediately without an accele
   const rig = createRig(), movement = new Movement(rig);
   movement.setTarget([0, Math.PI / 2, 0, 0]);
   movement.tick(.01);
-  assert.ok(Math.abs(rig.getAngles()[1] - 4 * Math.PI / 180) < 1e-9);
+  assert.ok(Math.abs(rig.getAngles()[1] - Math.PI / 180) < 1e-9);
   movement.setTarget([0, -Math.PI / 2, 0, 0]);
   movement.tick(.01);
   assert.ok(Math.abs(rig.getAngles()[1]) < 1e-9, 'Reversal has no acceleration delay.');
