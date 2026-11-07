@@ -63,26 +63,20 @@ test('Stop drops a pending destination, invalid targets are rejected, and small 
   assert.deepEqual(rig.getAngles(), target);
 });
 
-test('shoulder ramps up to 400 degrees/sec and brakes within its full travel', () => {
+test('shoulder responds at full speed and reverses immediately without an acceleration ramp', () => {
   const rig = createRig(), movement = new Movement(rig);
-  const toDegrees = angle => angle * 180 / Math.PI;
-  rig.setAngles([0, -Math.PI / 2, 0, 0]);
   movement.setTarget([0, Math.PI / 2, 0, 0]);
-  const speeds = [];
-  for (let frame = 0; frame < 300; frame++) {
-    const before = rig.getAngles()[1];
-    movement.tick(1 / 120);
-    const after = rig.getAngles()[1];
-    speeds.push(toDegrees(after - before) * 120);
-    assert.ok(after >= before - 1e-9 && after <= Math.PI / 2 + 1e-9);
-  }
-  assert.ok(speeds[0] > 0 && speeds[0] < 13);
-  assert.ok(Math.max(...speeds) > 399.9 && Math.max(...speeds) <= 400 + 1e-8);
-  assert.ok(speeds.some((speed, frame) => frame > 30 && speed > 0 && speed < 200));
-  assert.ok(Math.abs(toDegrees(rig.getAngles()[1]) - 90) < 1e-8);
+  movement.tick(.01);
+  assert.ok(Math.abs(rig.getAngles()[1] - 4 * Math.PI / 180) < 1e-9);
+  movement.setTarget([0, -Math.PI / 2, 0, 0]);
+  movement.tick(.01);
+  assert.ok(Math.abs(rig.getAngles()[1]) < 1e-9, 'Reversal has no acceleration delay.');
+  movement.hold();
+  movement.tick(.01);
+  assert.ok(Math.abs(rig.getAngles()[1]) < 1e-9, 'There is no residual velocity after Stop.');
 });
 
-test('shoulder reversal stays within joint limits and Stop cancels its ramp immediately', () => {
+test('shoulder reversal stays within joint limits and Stop cancels its target immediately', () => {
   const rig = createRig(), movement = new Movement(rig);
   movement.setTarget([0, 1, 0, 0]);
   for (let frame = 0; frame < 60; frame++) movement.tick(1 / 60);

@@ -191,16 +191,16 @@ test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t =>
   release();
   await f.connection.writing;
   await f.tick(6050);
-  assert.deepEqual(f.shoulders(), [90, 89]);
-  const expectedOtherChannels = encodeAngles(rig.getAngles()).replace(/S1:\d+/, 'S1:89');
+  assert.deepEqual(f.shoulders(), [89, 88]);
+  const expectedOtherChannels = encodeAngles(rig.getAngles()).replace(/S1:\d+/, 'S1:88');
   assert.equal(f.writes.at(-1).text, expectedOtherChannels);
   await f.tick(6055);
   assert.equal(f.writes.length, 2, 'The shoulder must not burst after the stalled write.');
   await f.tick(6800);
-  assert.deepEqual(f.shoulders(), [90, 89, 88]);
+  assert.deepEqual(f.shoulders(), [89, 88, 87]);
   f.set([.5, -1, .3, 0]);
   await f.tick(7500);
-  assert.deepEqual(f.shoulders(), [90, 89, 88, 89]);
+  assert.deepEqual(f.shoulders(), [89, 88, 87, 88]);
   assert.deepEqual(f.errors, []);
 });
 
