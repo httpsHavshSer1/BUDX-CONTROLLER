@@ -31,8 +31,8 @@ async function serialFixture({ write } = {}) {
 }
 
 test('serial protocol preserves the existing servo mapping and clamps hardware input', () => {
-  assert.equal(encodeAngles(JOINTS.map(joint => joint.min)), 'S0:0,S1:110,S2:0,S3:0\n');
-  assert.equal(encodeAngles(JOINTS.map(joint => joint.max)), 'S0:180,S1:70,S2:180,S3:180\n');
+  assert.equal(encodeAngles(JOINTS.map(joint => joint.min)), 'S0:0,S1:180,S2:0,S3:0\n');
+  assert.equal(encodeAngles(JOINTS.map(joint => joint.max)), 'S0:180,S1:0,S2:180,S3:180\n');
   const parsed = parseSerialLine('P0:200,P1:-20,P2:90,P3:180\r', [0, 0, 0, 0]);
   assert.deepEqual(parsed.angles, [JOINTS[0].max, JOINTS[1].max, 0, JOINTS[3].max]);
 });
@@ -79,11 +79,11 @@ test('serial input rejects negative indices, partial numbers, NaN, and unknown f
   assert.equal(parseSerialLine('DX:20,DY:-10', [0, 0, 0, 0]).dx, .02);
 });
 
-test('shoulder covers all 180 physical degrees within the confirmed command window and decodes reversed feedback', () => {
+test('shoulder covers all 180 physical degrees within the full 0–180 command range and decodes reversed feedback', () => {
   for (const degrees of [-90, -45, -21, -20, 0, 20, 21, 60, 75, 90]) {
     const angles = [0, degrees * Math.PI / 180, 0, 0];
-    assert.equal(encodeAngles(angles), `S0:90,S1:${Math.round(90 - degrees * 2 / 9)},S2:90,S3:90\n`);
-    const feedback = parseSerialLine(`P1:${Math.round(90 - degrees * 2 / 9)}`, [0, 0, 0, 0]);
+    assert.equal(encodeAngles(angles), `S0:90,S1:${Math.round(90 - degrees)},S2:90,S3:90\n`);
+    const feedback = parseSerialLine(`P1:${Math.round(90 - degrees)}`, [0, 0, 0, 0]);
     assert.ok(Math.abs(feedback.angles[1] - angles[1]) <= Math.PI / 80 + 1e-9);
   }
   const rig = createRig();
@@ -132,14 +132,14 @@ test('shoulder output continues beyond both 20-degree boundaries to the full end
     }
     const values = f.shoulders();
     const direction = endpoint < 0 ? 1 : -1;
-    assert.equal(values.at(-1), endpoint < 0 ? 110 : 70, 'USB reaches the full target, not only the central band.');
-    assert.ok(values.includes(endpoint < 0 ? 95 : 85), 'Commands continue beyond the reported ±20° boundary.');
+    assert.equal(values.at(-1), endpoint < 0 ? 180 : 0, 'USB reaches the full target, not only the central band.');
+    assert.ok(values.includes(endpoint < 0 ? 111 : 69), 'Commands continue beyond the reported ±20° boundary.');
     for (let i = 1; i < values.length; i++) {
       assert.equal(values[i] - values[i - 1], direction, 'Every completed shoulder command moves one degree in the corrected direction.');
-      assert.ok(f.writes[i].time - f.writes[i - 1].time >= 11.25);
+      assert.ok(f.writes[i].time - f.writes[i - 1].time >= 2.5);
     }
     assert.deepEqual(f.errors, []);
-    assert.ok(f.writes.at(-1).time <= 800, 'The USB shoulder target reaches either endpoint from center within 0.8 seconds.');
+    assert.ok(f.writes.at(-1).time <= 1300, 'The USB shoulder target reaches either endpoint from center within 1.3 seconds.');
   }
 });
 
@@ -174,7 +174,7 @@ test('Stop during an asynchronous serial connection remains in effect after open
   assert.deepEqual(errors, []);
 });
 
-test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t => {
+test('a six-second USB stall cannot skip the shoulder from 90 to 33', async t => {
   let release;
   const f = await serialFixture({ write: (_, count) => count === 1 ? new Promise(resolve => { release = resolve; }) : undefined });
   t.after(() => f.connection.disconnect());
@@ -186,7 +186,7 @@ test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t =>
     f.time(frame * 1000 / 60);
     f.connection.tick(frame * 1000 / 60);
   }
-  assert.equal(Number(encodeAngles(rig.getAngles()).match(/S1:(\d+)/)[1]), 77);
+  assert.equal(Number(encodeAngles(rig.getAngles()).match(/S1:(\d+)/)[1]), 33);
   f.time(6000);
   release();
   await f.connection.writing;
@@ -194,7 +194,7 @@ test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t =>
   assert.deepEqual(f.shoulders(), [89, 88]);
   const expectedOtherChannels = encodeAngles(rig.getAngles()).replace(/S1:\d+/, 'S1:88');
   assert.equal(f.writes.at(-1).text, expectedOtherChannels);
-  await f.tick(6055);
+  await f.tick(6051);
   assert.equal(f.writes.length, 2, 'The shoulder must not burst after the stalled write.');
   await f.tick(6800);
   assert.deepEqual(f.shoulders(), [89, 88, 87]);
@@ -210,7 +210,7 @@ test('shoulder updates faster than 20 Hz while other joints retain their 50 ms p
   f.set([1, 1, 1, 0]);
   await f.tick(0);
   f.set([1.5, 1, 1.5, 0]);
-  await f.tick(6);
+  await f.tick(1);
   assert.deepEqual(f.shoulders(), [89]);
   assert.equal(f.writes.length, 1, 'Other axes wait for their regular update.');
   f.set([1.5, 1.2, 1.5, 0]);

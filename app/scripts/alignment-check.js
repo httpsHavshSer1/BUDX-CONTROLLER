@@ -75,13 +75,13 @@ async page => {
     await target.waitForFunction(() => window.usb.writes.at(-1)?.includes('S3:150'));
     const sent = await writes();
     check(sent.length > 0, 'Fresh control input sends commands.');
-    check(sent.every(text => /^S0:103,S1:97,S2:130,S3:\d+\n$/.test(text)), 'Only claw changes; the first packet retains the aligned other joints and original protocol.');
+    check(sent.every(text => /^S0:103,S1:120,S2:130,S3:\d+\n$/.test(text)), 'Only claw changes; the first packet retains the aligned other joints and original protocol.');
     check(sent.at(-1).includes('S3:150'), 'Claw reaches the requested position.');
 
     // Exercise actual slider-to-USB output on both sides of the reported band.
     for (const degrees of [-15, -25, 15, 25]) {
       await angle('Shoulder', degrees);
-      await target.waitForFunction(value => Number(document.querySelectorAll('.angle-field input')[1].value) === value && window.usb.writes.at(-1)?.includes(`S1:${Math.round(90 - value * 2 / 9)},`), degrees);
+      await target.waitForFunction(value => Number(document.querySelectorAll('.angle-field input')[1].value) === value && window.usb.writes.at(-1)?.includes(`S1:${Math.round(90 - value)},`), degrees);
       check((await pose())[1] === degrees, 'The displayed shoulder keeps moving outside ±20 degrees.');
     }
     check(await target.evaluate(() => window.usb.times.some((time, index, times) => index > 0 && time - times[index - 1] < 45)), 'Shoulder USB output uses the faster clock instead of the old 50 ms cap.');

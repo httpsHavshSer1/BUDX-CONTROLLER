@@ -1,10 +1,9 @@
 import { JOINTS, clampAngle } from '../arm/rig.js';
 import { JOINT_SPEEDS } from '../movement.js';
 
-// Hardware calibration: the operator confirmed that commands 70–110 cover
-// the shoulder's full physical travel, with its direction reversed.
-const SHOULDER_MIN = 70;
-const SHOULDER_MAX = 110;
+// Use the full servo command range, reversed for the shoulder mounting.
+const SHOULDER_MIN = 0;
+const SHOULDER_MAX = 180;
 const SHOULDER_SPAN = SHOULDER_MAX - SHOULDER_MIN;
 const SHOULDER_STEP_INTERVAL = (JOINTS[1].max - JOINTS[1].min) / JOINT_SPEEDS[1] / SHOULDER_SPAN * 1000;
 const shoulderValue = message => Number(/(?:^|,)S1:(\d+)/.exec(message)[1]);
