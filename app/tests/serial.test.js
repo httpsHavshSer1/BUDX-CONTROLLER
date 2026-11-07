@@ -126,9 +126,9 @@ test('shoulder output continues beyond both 20-degree boundaries to the full end
     f.connection.resume();
     rig.subscribe(angles => f.set(angles));
     movement.setTarget([0, endpoint, 0, 0]);
-    for (let frame = 0; frame < 800; frame++) {
-      movement.tick(.05);
-      await f.tick(frame * 50);
+    for (let frame = 0; frame < 300; frame++) {
+      movement.tick(.012);
+      await f.tick(frame * 12);
     }
     const values = f.shoulders();
     const direction = endpoint < 0 ? 1 : -1;
@@ -136,10 +136,10 @@ test('shoulder output continues beyond both 20-degree boundaries to the full end
     assert.ok(values.includes(endpoint < 0 ? 95 : 85), 'Commands continue beyond the reported ±20° boundary.');
     for (let i = 1; i < values.length; i++) {
       assert.equal(values[i] - values[i - 1], direction, 'Every completed shoulder command moves one degree in the corrected direction.');
-      assert.ok(f.writes[i].time - f.writes[i - 1].time >= 112.5);
+      assert.ok(f.writes[i].time - f.writes[i - 1].time >= 11.25);
     }
     assert.deepEqual(f.errors, []);
-    assert.ok(f.writes.at(-1).time <= 3500, 'The USB shoulder target reaches either endpoint from center within 3.5 seconds.');
+    assert.ok(f.writes.at(-1).time <= 800, 'The USB shoulder target reaches either endpoint from center within 0.8 seconds.');
   }
 });
 
@@ -194,7 +194,7 @@ test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t =>
   assert.deepEqual(f.shoulders(), [90, 89]);
   const expectedOtherChannels = encodeAngles(rig.getAngles()).replace(/S1:\d+/, 'S1:89');
   assert.equal(f.writes.at(-1).text, expectedOtherChannels);
-  await f.tick(6100);
+  await f.tick(6055);
   assert.equal(f.writes.length, 2, 'The shoulder must not burst after the stalled write.');
   await f.tick(6800);
   assert.deepEqual(f.shoulders(), [90, 89, 88]);
@@ -204,20 +204,23 @@ test('a six-second USB stall cannot skip the shoulder from 90 to 77', async t =>
   assert.deepEqual(f.errors, []);
 });
 
-test('other joints keep updating while shoulder output waits for its next step', async t => {
+test('shoulder updates faster than 20 Hz while other joints retain their 50 ms pacing', async t => {
   const f = await serialFixture();
   t.after(() => f.connection.disconnect());
   f.set([1, 1, 1, 0]);
   await f.tick(0);
   f.set([1.5, 1, 1.5, 0]);
+  await f.tick(6);
+  assert.deepEqual(f.shoulders(), [89]);
+  assert.equal(f.writes.length, 1, 'Other axes wait for their regular update.');
+  f.set([1.5, 1.2, 1.5, 0]);
+  await f.tick(24);
+  assert.deepEqual(f.shoulders(), [89, 88]);
+  assert.equal(f.writes[1].text.replace(/S1:\d+/, 'S1:X'), f.writes[0].text.replace(/S1:\d+/, 'S1:X'), 'Fast shoulder packets keep other axes at their last completed positions.');
   await f.tick(50);
-  assert.deepEqual(f.shoulders(), [89, 89]);
-  assert.notEqual(f.writes[0].text.match(/S0:\d+/)[0], f.writes[1].text.match(/S0:\d+/)[0]);
-  assert.notEqual(f.writes[0].text.match(/S2:\d+/)[0], f.writes[1].text.match(/S2:\d+/)[0]);
-  await f.tick(100);
-  assert.equal(f.writes.length, 2);
-  await f.tick(600);
-  assert.deepEqual(f.shoulders(), [89, 89, 88]);
+  assert.deepEqual(f.shoulders(), [89, 88, 87]);
+  assert.notEqual(f.writes[0].text.match(/S0:\d+/)[0], f.writes[2].text.match(/S0:\d+/)[0]);
+  assert.notEqual(f.writes[0].text.match(/S2:\d+/)[0], f.writes[2].text.match(/S2:\d+/)[0]);
 });
 
 test('Stop discards shoulder catch-up and a resumed reversal uses the last completed command', async t => {

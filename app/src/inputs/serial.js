@@ -50,6 +50,7 @@ export class SerialConnection {
     this.pending = null;
     this.writing = null;
     this.lastWrite = -Infinity;
+    this.lastOtherWrite = -Infinity;
     this.lastMessage = '';
     this.suspended = false;
     this.shoulderTarget = null;
@@ -70,6 +71,7 @@ export class SerialConnection {
         catch (error) { this.port = null; throw error; }
         this.port = port;
         this.lastMessage = '';
+        this.lastOtherWrite = -Infinity;
         this.shoulderTarget = shoulderValue(encodeAngles(this.getAngles()));
         this.lastShoulderWrite = -Infinity;
         this.reading = this.read(port);
@@ -124,18 +126,23 @@ export class SerialConnection {
   }
 
   tick(now) {
-    if (!this.port?.writable || !this.pending || this.writing || this.suspended || now - this.lastWrite < 50) return;
+    if (!this.port?.writable || !this.pending || this.writing || this.suspended) return;
     const requested = this.pending;
     const desired = shoulderValue(requested);
     const previous = this.shoulderTarget ?? desired;
     // USB backpressure can skip many rendered poses. Bound the command that
     // actually goes to the shoulder, not just the on-screen animation.
     const shoulder = previous + (now - this.lastShoulderWrite >= SHOULDER_STEP_INTERVAL ? Math.max(-1, Math.min(1, desired - previous)) : 0);
-    const message = requested.replace(/S1:\d+/, `S1:${shoulder}`);
+    // Keep the other joints at 20 Hz while the shoulder takes faster, bounded
+    // steps. Retain their last sent values between their regular updates.
+    const otherDue = now - this.lastOtherWrite >= 50;
+    if (!otherDue && shoulder === previous) return;
+    const message = (otherDue ? requested : this.lastMessage).replace(/S1:\d+/, `S1:${shoulder}`);
     this.pending = message === requested ? null : requested;
     if (message === this.lastMessage) return;
     const writer = this.port.writable.getWriter();
     this.lastWrite = now;
+    if (otherDue) this.lastOtherWrite = now;
     this.writing = writer.write(new TextEncoder().encode(message))
       .then(() => {
         this.lastMessage = message;
@@ -154,6 +161,7 @@ export class SerialConnection {
     if (this.writing || !Array.isArray(angles) || angles.length !== JOINTS.length || !angles.every(Number.isFinite)) return false;
     this.hold();
     this.lastMessage = encodeAngles(angles);
+    this.lastOtherWrite = -Infinity;
     this.shoulderTarget = shoulderValue(this.lastMessage);
     this.lastShoulderWrite = -Infinity;
     return true;

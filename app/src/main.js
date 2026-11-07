@@ -52,6 +52,11 @@ const serial = new SerialConnection({
   },
   onError: reportError,
 });
+// Shoulder output needs a faster clock than display refresh. SerialConnection
+// still paces the other axes and prevents overlapping or catch-up writes.
+const serialTimer = setInterval(() => {
+  if (ready && !aligning && !disposed && !document.hidden) serial.tick(performance.now());
+}, 12);
 const tracker = new HandTracking({
   video: element('camera-video'),
   canvas: element('camera-overlay'),
@@ -255,7 +260,6 @@ function tick(now) {
     gamepad.tick(delta, rig.getAngles(), selected);
     motion.tick(delta);
     movement.tick(delta);
-    if (!aligning) serial.tick(now);
     if (motion.mode === 'idle' && source === 'sequence') setSource('manual');
     ui.motion(motion);
   }
@@ -268,6 +272,7 @@ function dispose() {
   stop();
   disposed = true;
   cancelAnimationFrame(frame);
+  clearInterval(serialTimer);
   events.abort();
   ui.dispose();
   glass.dispose();

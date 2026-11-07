@@ -45,3 +45,19 @@ test('controller drives the claw at 150 degrees/sec and A aligns instead of homi
     assert.deepEqual(actions, ['align']);
   } finally { Object.defineProperty(globalThis, 'navigator', original); }
 });
+
+test('shoulder controller input uses the faster rate instead of the old 1.4 rad/sec cap', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const pad = { index: 0, id: 'Shoulder test', connected: true, axes: [0, 0, 1, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false })) };
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { getGamepads: () => [pad] } });
+  try {
+    const rig = createRig();
+    rig.setAngles([0, JOINTS[1].min, 0, 0]);
+    const movement = new Movement(rig);
+    const input = new GamepadInput({ onStatus: () => {}, onSelect: () => {}, onMove: angles => movement.setTarget(angles, 'gamepad'), onOrbit: () => {}, onAction: () => {} });
+    for (let frame = 0; frame < 30; frame++) { input.tick(1 / 60, rig.getAngles(), 1); movement.tick(1 / 60); }
+    const travel = (rig.getAngles()[1] - JOINTS[1].min) * 180 / Math.PI;
+    assert.ok(travel > 65 && travel < 75, `Shoulder traveled ${travel} degrees in half a second.`);
+    assert.deepEqual(rig.getAngles().filter((_, index) => index !== 1), [0, 0, 0]);
+  } finally { Object.defineProperty(globalThis, 'navigator', original); }
+});

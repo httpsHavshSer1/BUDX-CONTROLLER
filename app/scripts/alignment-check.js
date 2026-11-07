@@ -5,7 +5,7 @@ async page => {
   const target = await context.newPage();
   target.on('pageerror', error => errors.push(error.message));
   await target.addInitScript(() => {
-    window.usb = { writes: [], block: false, release: null };
+    window.usb = { writes: [], times: [], block: false, release: null };
     window.pad = { index: 0, id: 'Synthetic gamepad', connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false })) };
     Object.defineProperty(navigator, 'getGamepads', { value: () => [window.pad] });
     Object.defineProperty(navigator, 'serial', { value: { requestPort: async () => ({
@@ -14,6 +14,7 @@ async page => {
       writable: { getWriter: () => ({
         write: async bytes => {
           window.usb.writes.push(new TextDecoder().decode(bytes));
+          window.usb.times.push(performance.now());
           if (window.usb.block) await new Promise(resolve => { window.usb.release = resolve; });
         }, releaseLock() {},
       }) },
@@ -83,6 +84,7 @@ async page => {
       await target.waitForFunction(value => Number(document.querySelectorAll('.angle-field input')[1].value) === value && window.usb.writes.at(-1)?.includes(`S1:${Math.round(90 - value * 2 / 9)},`), degrees);
       check((await pose())[1] === degrees, 'The displayed shoulder keeps moving outside ±20 degrees.');
     }
+    check(await target.evaluate(() => window.usb.times.some((time, index, times) => index > 0 && time - times[index - 1] < 45)), 'Shoulder USB output uses the faster clock instead of the old 50 ms cap.');
 
     // Re-alignment waits for an accepted write, then drops any old destination.
     await target.evaluate(() => { window.usb.block = true; });
